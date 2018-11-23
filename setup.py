@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='python-sqlite-orm',
+    name='py-sqlite-orm',
     version='0.0.1',
     author='danydr',
     author_email='ddv_2010@mail.ru',

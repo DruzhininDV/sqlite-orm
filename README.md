@@ -14,7 +14,7 @@ Install
 --------
 
 ```bash
-pip install python-sqlite-orm
+pip install py-sqlite-orm
 ```
 
 Usage
