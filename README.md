@@ -1,12 +1,23 @@
 SQLite simple ORM
 =========
 
-It is a simple and small ORM for SQLite database.
+It is a simple and small ORM for SQLite database. 
+An object-relational mapper (ORM) is a code library that automates the 
+transfer of data stored in relational databases 
+tables into objects that are more commonly used in application code.
+
 
 * python 3+ (developed with 3.7)
 * supports SQLite only
 
-Example
+Install
+--------
+
+```bash
+pip install python-sqlite-orm
+```
+
+Usage
 --------
 ```python
 
@@ -14,10 +25,13 @@ from sqlite_orm.database import Database
 from sqlite_orm.field import IntegerField, BooleanField, TextField
 from sqlite_orm.table import BaseTable
 
+import logging
+
+
 class User(BaseTable):
     __table_name__ = 'users'
 
-    id = IntegerField(primary_key=True)
+    id = IntegerField(primary_key=True, auto_increment=True) #autoincrement int field
     name = TextField(not_null=True)
     active = BooleanField(not_null=True, default_value=1)
 
@@ -31,11 +45,18 @@ class Post(BaseTable):
 
 
 if __name__ == '__main__':
+
+    #logger configure:
+    logging.basicConfig(filename="sample.log", level=logging.DEBUG, format=('%(asctime)s: '
+                                                                            '%(filename)s: '
+                                                                            '%(levelname)s: '
+                                                                            '%(funcName)s(): '
+                                                                            '%(lineno)d: '
+                                                                            '%(message)s'), datefmt="%Y-%m-%d %H:%M:%S")
     with Database("test.db") as db:
-        # создание таблиц;
+        # create table
         db.query(Post, User).create().execute()
 
-        # insert
         user1 = User(id=1, name='User1')
         user2 = User(id=2, name='User2')
         user3 = User(id=3, name='User3')
@@ -44,10 +65,10 @@ if __name__ == '__main__':
         post2 = Post(id=2, name='Post2', id_user=user2.id)
         post3 = Post(id=3, name='Post3', id_user=user3.id)
 
-        #вставка данных
+        #insert data
         db.query().insert(user1, user2, user3, post1, post2, post3).execute()
 
-        # select с указанием необходимых столбцов + автоджоин таблиц, на которые есть fk;
+        # select with columns + autojoin with fk;
         print('\n=======SELECT + Auto Join=======')
         for row in db.query(User, Post.name).select().join(Post).execute():
             print(row)
@@ -65,10 +86,7 @@ if __name__ == '__main__':
         for row in db.query(User, Post.name).select().join(Post).execute():
             print(row)
 
-        # удаление таблиц;
+        # delete
         db.query(User, Post).drop().execute()
-        
-        # + обработка базовых ошибок (нет таблицы, нет столбца, не указано значение у обязательного столбца);
-
 ```
 

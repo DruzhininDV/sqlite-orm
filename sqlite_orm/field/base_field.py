@@ -1,6 +1,6 @@
 class BaseField:
     __type_name__ = None
-    __template_definition__ = '{TYPE} {NOT_NULL} {PRIMARY_KEY} {DEFAULT_VALUE}'
+    __template_definition__ = '{TYPE} {NOT_NULL} {PRIMARY_KEY} {DEFAULT_VALUE} {AUTOINCREMENT}'
     __template_foreign_key_definition__ = 'FOREIGN KEY ({self_name}) REFERENCES {table_name}({field_name})'
     __template_cmp__ = '{field_name} {operator} {other}'
 
@@ -18,6 +18,7 @@ class BaseField:
         self.foreign_key = foreign_key
         self.default_value = self.__class__.value(default_value)
         self.table_class = None
+        self.auto_increment = None
 
     @property
     def type_name(self):
@@ -34,13 +35,12 @@ class BaseField:
             'NOT_NULL': 'NOT NULL' if self.not_null else '',
             'PRIMARY_KEY': 'PRIMARY KEY' if self.primary_key else '',
             'DEFAULT_VALUE': 'DEFAULT %s' % self.default_value if self.default_value is not None else '',
+            'AUTOINCREMENT': 'AUTOINCREMENT' if self.auto_increment is not None else '',
         }
 
     @property
     def foreign_key_definition(self):
-        if self.foreign_key is None:
-            return None
-        return self.__template_foreign_key_definition__.format(
+        return self.foreign_key is not None and self.__template_foreign_key_definition__.format(
             self_name=self.name,
             table_name=self.foreign_key.table_name,
             field_name=self.foreign_key.name
@@ -63,7 +63,7 @@ class BaseField:
 
     @property
     def full_name(self):
-        return self.table_name + '.' + self.name
+        return '{}.{}'.format(self.table_name, self.name)
 
     @classmethod
     def quoted_value(cls, val):

@@ -1,3 +1,5 @@
+import logging
+
 from sqlite_orm.database import Database
 from sqlite_orm.field import IntegerField, BooleanField, TextField
 from sqlite_orm.table import BaseTable
@@ -6,7 +8,7 @@ from sqlite_orm.table import BaseTable
 class User(BaseTable):
     __table_name__ = 'users'
 
-    id = IntegerField(primary_key=True)
+    id = IntegerField(primary_key=True, auto_increment=True)
     name = TextField(not_null=True)
     active = BooleanField(not_null=True, default_value=1)
 
@@ -20,6 +22,15 @@ class Post(BaseTable):
 
 
 if __name__ == '__main__':
+
+    # add filemode="w" to overwrite
+    logging.basicConfig(filename="sample.log", level=logging.DEBUG, format=('%(asctime)s: '
+                                                                            '%(filename)s: '
+                                                                            '%(levelname)s: '
+                                                                            '%(funcName)s(): '
+                                                                            '%(lineno)d: '
+                                                                            '%(message)s'), datefmt="%Y-%m-%d %H:%M:%S")
+
     with Database("test.db") as db:
         # создание таблиц;
         db.query(Post, User).create().execute()

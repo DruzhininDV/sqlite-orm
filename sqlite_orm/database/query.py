@@ -1,56 +1,18 @@
+import logging
+
+from ..exception import DatabaseError
+from ..exception import ExceptionWrapper
+from ..exception import IntegrityError
+from ..exception import OperationalError
 from ..field import BaseField
 from ..table import BaseTable
-
-
-def reraise(tp, value, tb=None):
-    if value.__traceback__ is not tb:
-        raise value.with_traceback(tb)
-    raise value
-
-
-class SQLiteORMException(Exception):
-    pass
-
-
-class ImproperlyConfigured(SQLiteORMException):
-    pass
-
-
-class DatabaseError(SQLiteORMException):
-    pass
-
-
-class IntegrityError(DatabaseError):
-    pass
-
-
-class OperationalError(DatabaseError):
-    pass
-
-
-class ExceptionWrapper(object):
-    __slots__ = ('exceptions',)
-
-    def __init__(self, exceptions):
-        self.exceptions = exceptions
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type is None:
-            return
-        if exc_type.__name__ in self.exceptions:
-            new_type = self.exceptions[exc_type.__name__]
-            exc_args = exc_value.args
-            reraise(new_type, new_type(*exc_args), traceback)
-
 
 EXCEPTIONS = {
     'ConstraintError': IntegrityError,
     'DatabaseError': DatabaseError,
     'IntegrityError': IntegrityError,
-    'OperationalError': OperationalError}
+    'OperationalError': OperationalError,
+    'Exception': Exception}
 
 __exception_wrapper__ = ExceptionWrapper(EXCEPTIONS)
 
@@ -79,15 +41,17 @@ class Query:
         self.__fields = []
         self.__main_table = None
 
-        for arg in args:
-            if isinstance(arg, BaseField):
-                self.__fields.append(arg)
-            elif issubclass(arg, BaseTable):
-                self.__tables.add(arg)
-                self.__fields.extend([field[1] for field in arg.get_fields()])
-            else:
-                # TODO raise
-                pass
+        with __exception_wrapper__:
+            for arg in args:
+                if isinstance(arg, BaseField):
+                    self.__fields.append(arg)
+                elif issubclass(arg, BaseTable):
+                    self.__tables.add(arg)
+                    self.__fields.extend([field[1] for field in arg.get_fields()])
+                else:
+                    raise Exception(
+                        "'{}' must be instance or subclass of '{}'".format(arg.__name__, BaseField.__name__))
+
         if self.__fields:
             self.__main_table = self.__fields[0].table_class
 
@@ -100,7 +64,7 @@ class Query:
         if self.__join_str:
             query += self.__join_str
         if self.__filter_str:
-            query += '\nWHERE ' + self.__filter_str
+            query += '\nWHERE {}'.format(self.__filter_str)
         return query
 
     @classmethod
@@ -124,9 +88,9 @@ class Query:
 
     def __get_create_table_script__(self, cls):
         fields = cls.get_fields()
-        columns_definition = ',\n'.join((field[0] + ' ' + field[1].definition for field in fields))
+        columns_definition = ',\n'.join(('{} {}'.format(field[0], field[1].definition) for field in fields))
         foreign_keys_definition = '\n'.join(
-            ', ' + field[1].foreign_key_definition for field in fields if field[1].foreign_key_definition)
+            ', {}'.format(field[1].foreign_key_definition) for field in fields if field[1].foreign_key_definition)
 
         return self.__create_table_template__.format(
             table_name=cls.__table_name__,
@@ -143,7 +107,7 @@ class Query:
     def get_update_script(self, table_name, columns_values):
         return self.__update_template__.format(
             table_name=table_name,
-            columns_values=',\n'.join(['%s = %s' % (column, value) for column, value in columns_values.items()])
+            columns_values=',\n'.join(['{} = {}'.format(column, value) for column, value in columns_values.items()])
         )
 
     def __get_select_script__(self, table_name, columns_names):
@@ -159,7 +123,7 @@ class Query:
         self.__query_str = query
 
     def add_filter_str(self, filter_str, logical_operator):
-        self.__filter_str += (' %s ' % logical_operator if self.__filter_str else '') + filter_str
+        self.__filter_str += (' {} '.format(logical_operator) if self.__filter_str else '').join(filter_str)
 
     def get_delete_script(self, table_name):
         return self.__delete_template__.format(table_name=table_name)
@@ -213,7 +177,9 @@ class Query:
         assert logical_operator_inner.upper() in ('AND', 'OR'), 'logical_operator_inner choice of OR, AND'
         assert logical_operator_outer.upper() in ('AND', 'OR'), 'logical_operator_outer choice of OR, AND'
 
-        filter_condition = '(%s)' % ((' %s ' % logical_operator_inner).join(condition_expressions))
+        filter_condition = '({})'.format((' {} '.format(logical_operator_inner).join(condition_expressions)))
+        logging.debug(
+            "Getting filter condition: {} and logical operator: {}".format(filter_condition, logical_operator_outer))
         self.add_filter_str(filter_condition, logical_operator_outer)
 
         return self
@@ -260,14 +226,15 @@ class Query:
         :param auto_join: флаг(генерировать условие присеодинения для таблиц с FK, если True)
         :return: инстанс Query
         """
-        join_str = '\nJOIN %s' % table.__table_name__
+        join_str = '\nJOIN {}'.format(table.__table_name__)
         if auto_join:
             field_foreign_key = self.__main_table.get_foreign_field_by_table(table) or \
                                 table.get_foreign_field_by_table(self.__main_table)
             if field_foreign_key:
-                join_str += ' ON %s = %s' % (field_foreign_key.full_name, field_foreign_key.foreign_key.full_name)
+                join_str += ' ON {} = {}'.format(field_foreign_key.full_name, field_foreign_key.foreign_key.full_name)
 
         self.add_join_str(join_str)
+        logging.debug("Getting join string: {}".format(join_str))
         return self
 
     def execute(self):
@@ -280,10 +247,11 @@ class Query:
             cur = self.__connect.cursor()
             try:
                 for query in self.query_list:
+                    logging.debug("Execute query: {}".format(query))
                     cur.execute(query)
-            except Exception:
+            except Exception as e:
                 self.__connect.rollback()
-                raise
+                raise e
             else:
                 self.__connect.commit()
         return cur
